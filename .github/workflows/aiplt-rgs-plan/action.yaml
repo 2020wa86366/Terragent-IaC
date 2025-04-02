@@ -1,0 +1,103 @@
+# .github/actions/terraform-plan/action.yaml
+name: 'Terraform Plan'
+description: 'Generates an execution plan for Terraform'
+
+inputs:
+  ARM_CLIENT_ID:
+    description: 'Azure Client ID'
+    required: true
+  ARM_CLIENT_SECRET:
+    description: 'Azure Client Secret'
+    required: true
+  ARM_SUBSCRIPTION_ID:
+    description: 'Azure Subscription ID'
+    required: true
+  ARM_TENANT_ID:
+    description: 'Azure Tenant ID'
+    required: true
+  DIRECTORY:
+    description: 'The directory to run Terraform in'
+    required: true
+  
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_wrapper: false
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: |
+          {
+            "clientId": "${{ inputs.ARM_CLIENT_ID }}",
+            "clientSecret": "${{ inputs.ARM_CLIENT_SECRET }}",
+            "subscriptionId": "${{ inputs.ARM_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ inputs.ARM_TENANT_ID }}"
+          }
+
+    - name: Terraform Init
+      run: terraform init
+      shell: bash
+      working-directory: ${{ inputs.DIRECTORY }}
+      env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+
+    - name: Terraform Format
+      run: terraform fmt -check
+      shell: bash
+      working-directory: ${{ inputs.DIRECTORY }}
+      env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+
+    - name: Terraform Refresh
+      run: terraform refresh
+      shell: bash
+      working-directory: ${{ inputs.DIRECTORY }}
+      env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+
+    - name: Terraform Plan
+      run: |
+        terraform plan -detailed-exitcode -out plan.tfplan || exitcode=$? 
+        echo "exitcode=$exitcode" >> $GITHUB_ENV
+        echo "tfplanExitCode=$exitcode" >> $GITHUB_ENV
+        echo "tfplanExitCode=$exitcode" >> $GITHUB_OUTPUT
+        if [ $exitcode -eq 1 ]; then
+          echo "Terraform Plan Failed!"
+          exit 1
+        fi
+      shell: bash
+      working-directory: ${{ inputs.DIRECTORY }}
+      env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+
+    - name: Upload Terraform Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: plan
+        path: ${{ inputs.DIRECTORY }}/plan.tfplan
+        env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+

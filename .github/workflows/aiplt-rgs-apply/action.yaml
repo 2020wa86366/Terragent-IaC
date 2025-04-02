@@ -1,0 +1,71 @@
+# .github/actions/terraform-apply/action.yaml
+name: 'Terraform Apply'
+description: 'Applies Terraform changes'
+inputs:
+  ARM_CLIENT_ID:
+    description: 'Azure Client ID'
+    required: true
+  ARM_CLIENT_SECRET:
+    description: 'Azure Client Secret'
+    required: true
+  ARM_SUBSCRIPTION_ID:
+    description: 'Azure Subscription ID'
+    required: true
+  ARM_TENANT_ID:
+    description: 'Azure Tenant ID'
+    required: true
+  DIRECTORY:
+    description: 'The directory to run Terraform in'
+    required: true
+  location:
+        description: 'Deployment location'
+        required: true
+  env:
+        description: 'Environment'
+        required: true
+
+  
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Terraform Init
+      run: terraform init
+      env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+      shell: bash
+
+    - name: Download Terraform Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: plan
+        path: ${{ inputs.DIRECTORY }}
+      env: 
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}
+      #shell: bash
+
+    - name: Terraform Apply
+      run: |
+        terraform apply -auto-approve -input=false -lock=false plan.tfplan 
+        if [ $? -eq 0 ]; then
+          echo "Terraform apply completed successfully."
+        else
+          echo "Terraform apply failed. Check the logs for errors."
+          exit 1
+        fi
+      shell: bash
+      working-directory: ${{ inputs.DIRECTORY }}
+      env:
+        ARM_CLIENT_ID: ${{ inputs.ARM_CLIENT_ID }}
+        ARM_CLIENT_SECRET: ${{ inputs.ARM_CLIENT_SECRET }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.ARM_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.ARM_TENANT_ID }}

@@ -1,0 +1,69 @@
+name: "Terragent-RG-Destroy"
+
+on:
+  workflow_dispatch:
+
+env:
+  ARM_CLIENT_ID: "${{ secrets.ARM_CLIENT_ID }}"
+  ARM_CLIENT_SECRET: "${{ secrets.ARM_CLIENT_SECRET }}"
+  ARM_SUBSCRIPTION_ID: "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+  ARM_TENANT_ID: "${{ secrets.ARM_TENANT_ID }}"
+
+jobs:
+  terraform-destroy:
+    name: 'Terraform Destroy'
+    runs-on: AI360Platform_Prod_LR01
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - terragent-app/terraform-infra-eastus/Terragent-DocumentAI
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+
+    steps:
+      # Checkout the repository to the GitHub Actions runner
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install the latest version of Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # Login Azure
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+            }
+
+      - name: Azure CLI script
+        uses: azure/cli@v2
+        with:
+          azcliversion: latest
+          inlineScript: az account show
+
+      # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Refresh
+        run: terraform refresh
+
+      # Terraform Destroy
+      - name: 'Terraform Destroy'
+        run: |
+          terraform destroy -auto-approve -input=false
+          if [ $? -eq 0 ]; then
+            echo "Terraform destroy completed successfully."
+          else
+            echo "Terraform destroy failed. Check the logs for errors."
+            exit 1
+          fi

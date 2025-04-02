@@ -1,0 +1,191 @@
+
+name: "Terragent-RG-Create"
+
+on:
+    workflow_dispatch:
+  #push:
+    #branches:
+     # - main
+     # - 'azurerm-version-up*'
+    #paths:
+      #- 'terragent-app/terraform-infra-eastus/**'
+
+env:
+    ARM_CLIENT_ID: "${{ secrets.ARM_CLIENT_ID }}"
+    ARM_CLIENT_SECRET : "${{ secrets.ARM_CLIENT_SECRET }}"
+    ARM_SUBSCRIPTION_ID: "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+    ARM_TENANT_ID: "${{ secrets.ARM_TENANT_ID }}"
+    
+
+jobs:
+  terraform-plan:
+    name: 'Terraform Plan'
+    runs-on: AI360Platform_Prod_LR01
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+           
+          - terragent-app/terraform-infra-eastus/Terragent-DocumentAI
+     
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+
+    outputs:
+      tfplanExitCode: ${{ steps.AIPLT-plan.outputs.exitcode }}
+  
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Install the latest version of the Terraform CLI
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_wrapper: false
+
+    # Login Azure
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: |
+         {
+            "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+         }
+
+    - name: Azure CLI script
+      uses: azure/cli@v2
+      with:
+        azcliversion: latest
+        inlineScript: az account show
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    # Will fail the build if not
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    #Sync the state file with latest state of infra changes
+    - name: Terraform Refresh
+      run: terraform refresh
+ 
+    # Generates an execution plan for Terraform
+
+    - name: Terraform Plan
+      id: AIPLT-plan
+      run: |
+        export exitcode=0
+        terraform plan -detailed-exitcode -out AIPLT-plan || export exitcode=$?
+        echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
+        
+        if [ $exitcode -eq 1 ]; then
+          echo Terraform Plan Failed!
+          exit 1
+        else 
+          exit 0
+        fi
+        
+    # Save plan to artifacts  
+    - name: Publish Terraform Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: AIPLT-plan
+        #path:
+        path: ${{ matrix.directory }}/AIPLT-plan
+        
+        
+    # Create string output of Terraform Plan
+    - name: Create String Output
+      id: AIPLT-plan-string
+      run: |
+        TERRAFORM_PLAN=$(terraform show -no-color AIPLT-plan)
+        
+        delimiter="$(openssl rand -hex 8)"
+        echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
+        echo "## Terraform Plan Output" >> $GITHUB_OUTPUT
+        echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        echo '```terraform' >> $GITHUB_OUTPUT
+        echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
+        echo '```' >> $GITHUB_OUTPUT
+        echo "</details>" >> $GITHUB_OUTPUT
+        echo "${delimiter}" >> $GITHUB_OUTPUT
+                
+  terraform-apply:
+    name: 'Terraform Apply'
+    if: github.ref == 'refs/heads/main' && needs.terraform-plan.outputs.tfplanExitCode == 2
+    runs-on: AI360Platform_Prod_LR01
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+             
+          - terragent-app/terraform-infra-eastus/Terragent-DocumentAI
+       
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+
+    outputs:
+      tfapplyExitCode: ${{ steps.AIPLT-apply.outputs.exitcode }}
+        
+    needs: [terraform-plan]
+    
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file with a Terraform Cloud user API token
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+  #Login Azure
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: |
+         {
+            "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+             "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+         }
+
+    - name: Azure CLI script
+      uses: azure/cli@v2
+      with:
+        azcliversion: latest
+        inlineScript: |
+            az account show
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+      
+    - name: Terraform Init
+      run: terraform init
+
+    # Download saved plan from artifacts  
+    - name: Download Terraform Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: AIPLT-plan
+        path: ${{ matrix.directory }}
+
+    - name: 'Terraform Apply (Read-Only)'
+      id: AIPLT-apply
+      run: |
+        terraform apply -auto-approve -input=false -lock=false AIPLT-plan
+        if [ $? -eq 0 ]; then
+          echo "Terraform apply completed successfully."
+        else
+          echo "Terraform apply failed. Check the logs for errors."
+          exit 1
+        fi

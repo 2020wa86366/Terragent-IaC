@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Terragent GCP</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Terragent GCP</h1>
+    <div class="deployment-buttons">
+      <form action="/deploy/gresource-group" method="post">
+        <button type="submit" class="deployment-button">Deploy Resource Group</button>
+      </form>
+      <form action="/deploy/gvnet" method="post">
+        <button type="submit" class="deployment-button">Deploy Virtual Network</button>
+      </form>
+      <form action="/deploy/gappgw" method="post">
+        <button type="submit" class="deployment-button">Deploy Application Gateway</button>
+      </form>
+      <form action="/deploy/gstorage-account" method="post">
+        <button type="submit" class="deployment-button">Deploy Storage Account</button>
+      </form>
+      <form action="/deploy/gaks" method="post">
+        <button type="submit" class="deployment-button">Deploy Kubernetes</button>
+      </form>
+      <!-- Add more buttons for other deployments -->
+    </div>
+  </div>
+  <script src="/script.js"></script>
+</body>
+</html>

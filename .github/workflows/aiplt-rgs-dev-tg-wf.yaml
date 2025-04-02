@@ -1,0 +1,143 @@
+name: "aiplt-rgs-dev-tg-wf"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Environments/Dev-Env/aiplt-rgs-dev-tg/**'
+
+env:
+    ARM_CLIENT_ID: "${{ secrets.ARM_CLIENT_ID }}"
+    ARM_CLIENT_SECRET : "${{ secrets.ARM_CLIENT_SECRET }}"
+    ARM_SUBSCRIPTION_ID: "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+    ARM_TENANT_ID: "${{ secrets.ARM_TENANT_ID }}"
+
+jobs:
+  terragrunt-plan:
+    name: 'Terragrunt Plan'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - Environments/Dev-Env/aiplt-rgs-dev-tg/
+     
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+
+    outputs:
+      tgplanExitCode: ${{ steps.AIPLT-plan.outputs.exitcode }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: |
+         {
+            "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+         }
+
+    - name: Azure CLI script
+      uses: azure/cli@v2
+      with:
+        azcliversion: latest
+        inlineScript: |
+                az account show
+
+    - name: Gruntwork Terragrunt Plan
+      uses: gruntwork-io/terragrunt-action@v2.1.4
+      with:
+        tg_version: 'latest'
+        tf_version: 'latest' # Specify the Terraform version you're using
+        tg_command: 'plan -detailed-exitcode -out AIPLT-plan || export exitcode=$?'
+        tg_dir: ${{ matrix.directory }}
+        tg_comment: '1'
+        tg_add_approve: '1'
+
+    # Save plan to artifacts  
+    - name: Publish Terragrunt Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: AIPLT-plan
+        #path:
+        path: ${{ matrix.directory }}/AIPLT-plan
+    # Create string output of terragrunt Plan
+    - name: Create String Output
+      id: AIPLT-plan-string
+      run: |
+        TERRAFORM_PLAN=$(terraform show -no-color AIPLT-plan)
+        
+        delimiter="$(openssl rand -hex 8)"
+        echo "summary<<${delimiter}" >> $GITHUB_OUTPUT
+        echo "## terraform Plan Output" >> $GITHUB_OUTPUT
+        echo "<details><summary>Click to expand</summary>" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        echo '```terraform' >> $GITHUB_OUTPUT
+        echo "$TERRAFORM_PLAN" >> $GITHUB_OUTPUT
+        echo '```' >> $GITHUB_OUTPUT
+        echo "</details>" >> $GITHUB_OUTPUT
+        echo "${delimiter}" >> $GITHUB_OUTPUT
+
+  terragrunt-apply:
+    name: 'Terragrunt Apply'
+    if: github.ref == 'refs/heads/main' && needs.terragrunt-plan.outputs.tgplanExitCode == 2
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - Environments/Dev-Env/aiplt-rgs-dev-tg/
+
+    outputs:
+      tfapplyExitCode: ${{ steps.AIPLT-apply.outputs.exitcode }}
+     
+    needs: [terragrunt-plan]
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: |
+         {
+            "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+         }
+
+    - name: Download Terragrunt Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: AIPLT-plan
+        path: ${{ matrix.directory }}
+
+    - name: Gruntwork Terragrunt Apply
+      uses: gruntwork-io/terragrunt-action@v2.1.4
+      with:
+        tg_version: 'latest'
+        tf_version: 'latest' # Specify the Terraform version you're using
+        tg_command: 'apply -auto-approve -input=false -lock=false AIPLT-plan'
+        tg_dir: ${{ matrix.directory }}
+        tg_comment: '1'
+        tg_add_approve: '1' # Automatically add -auto-approve for apply command
+
+    - name: Printing Output
+      id: AIPLT-apply
+      run: |
+           if [ $? -eq 0 ]; then
+            echo "Terraform apply completed successfully."
+              else
+            echo "Terraform apply failed. Check the logs for errors."
+              exit 1
+           fi

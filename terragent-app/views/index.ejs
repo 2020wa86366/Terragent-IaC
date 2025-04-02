@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Terragent Deployment</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+</head>
+<body>
+  <div class="container">
+    <h1><center>Terragent</center></h1>
+    <div id="message-box" class="message-box">Status: Unknown</div>
+
+    <!-- Cloud provider buttons -->
+    <div class="button-group">
+      <button id="azure-button" class="cloud-button azure">Azure</button>
+      <button id="aws-button" class="cloud-button aws">AWS</button>
+      <button id="gcp-button" class="cloud-button gcp">GCP</button>
+      <button id="on-prem-button" class="cloud-button on-prem">On-Prem</button>
+    </div>
+
+    <!-- Azure resources dropdown and action buttons -->
+    <div id="azure-resources" class="cloud-resources" style="display: none;">
+      <select id="azure-resource-dropdown" class="resource-dropdown">
+        <option value="/deploy/resource-group">Resource Group</option>
+        <option value="/deploy/vnet">Virtual Network</option>
+        <option value="/deploy/openai">OpenAI</option>
+        <option value="/deploy/documentai">Document AI</option>
+        <option value="/deploy/ai-webapp">AI Web App</option>
+        <!-- Add more options for other resources -->
+      </select>
+      
+      <!-- Deploy and Destroy buttons for Azure -->
+      <button onclick="deployResource('azure')" class="deployment-button">Deploy</button>
+      <button onclick="destroyResource('azure')" class="destroy-button">Destroy</button>
+    </div>
+
+    <!-- Add dropdowns and buttons for AWS, GCP, and On-Prem here, similar to the Azure section above -->
+    
+    <!-- Add this where you want the tags form to appear -->
+    <div class="terraform-tags-form">
+      <h3>Update Terraform Tags</h3>
+      <form id="terraformTagsForm">
+        <div class="form-group">
+          <label for="terraformTags">Enter Tags (format: key=value,key2=value2)</label>
+          <input type="text" id="terraformTags" name="tags" 
+                 placeholder="environment=prod,project=demo,owner=team1" required>
+        </div>
+        <button type="submit">Update Tags & Deploy</button>
+      </form>
+      <div id="updateStatus"></div>
+    </div>
+
+    <div class="resource-group-query">
+      <h3>Query Resource Group Details</h3>
+      <form id="resourceGroupQueryForm">
+        <div class="form-group">
+          <label for="resourceGroupName">Resource Group Name:</label>
+          <input type="text" id="resourceGroupName" name="resourceGroupName" required>
+        </div>
+        <button type="submit">Query Details</button>
+      </form>
+      <div id="queryResult" class="query-result"></div>
+    </div>
+  </div>
+  <script src="/script.js"></script>
+  <!-- Add this JavaScript to handle the form submission -->
+  <script>
+  document.getElementById('tagsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const tagsInput = document.getElementById('tags').value;
+    
+    try {
+      // First update the tags
+      const updateResponse = await fetch('/update-tags', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ tags: tagsInput })
+      });
+      
+      if (!updateResponse.ok) throw new Error('Failed to update tags');
+      
+      // Then trigger the workflow
+      const deployResponse = await fetch('/deploy/resource-group', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!deployResponse.ok) throw new Error('Failed to trigger deployment');
+      
+      alert('Tags updated and deployment triggered successfully!');
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  });
+
+  document.getElementById('terraformTagsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const statusDiv = document.getElementById('updateStatus');
+    const tags = document.getElementById('terraformTags').value;
+    
+    statusDiv.textContent = 'Updating tags and triggering deployment...';
+    
+    try {
+      const response = await fetch('/update-terraform-tags', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ tags })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        statusDiv.textContent = data.message;
+        // Clear the form
+        document.getElementById('terraformTags').value = '';
+      } else {
+        throw new Error(data.message || 'Failed to update tags');
+      }
+    } catch (error) {
+      statusDiv.textContent = `Error: ${error.message}`;
+    }
+  });
+
+  document.getElementById('resourceGroupQueryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resultDiv = document.getElementById('queryResult');
+    const resourceGroupName = document.getElementById('resourceGroupName').value;
+    
+    resultDiv.innerHTML = 'Querying resource group details...';
+    
+    try {
+      const response = await fetch('/query/resource-group', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ resourceGroupName })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        resultDiv.innerHTML = `
+          <h4>Query Status:</h4>
+          <p>${data.message}</p>
+          <p>Check workflow status for details.</p>
+        `;
+        
+        // Poll for workflow status
+        const statusCheck = setInterval(async () => {
+          const statusResponse = await fetch('/workflow-status');
+          const statusData = await statusResponse.json();
+          
+          if (statusData.status === 'completed') {
+            clearInterval(statusCheck);
+            if (statusData.conclusion === 'success') {
+              resultDiv.innerHTML += `
+                <div class="success">
+                  <p>Query completed successfully!</p>
+                  <p><a href="${statusData.url}" target="_blank">View detailed results</a></p>
+                </div>
+              `;
+            }
+          }
+        }, 5000); // Check every 5 seconds
+        
+      } else {
+        throw new Error(data.message || 'Failed to query resource group');
+      }
+    } catch (error) {
+      resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+    }
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+# .github/workflows/Terragent.yaml
+name: "aiplt-demo-eastus-rgs-wf"
+
+on:
+  workflow_dispatch:
+    #inputs:
+      #location:
+       # description: 'Deployment location'
+        #required: true
+      #env:
+        #description: 'Environment'
+        #required: true
+  #push:
+    #branches:
+      #- main
+      #- 'azurerm-version-up*'
+    #paths:
+      #- 'terraform-infra/centralus/aiplt-staging-centralus-rgs/**'
+env:
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+jobs:
+  terraform-plan:
+    name: 'Terraform Plan'
+    runs-on: ubuntu-latest # Update this if you have a specific runner
+    outputs:
+      tfplanExitCode: ${{ steps.plan.outputs.tfplanExitCode }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - name: Run Terraform Plan
+        id: plan
+        uses: ./.github/workflows/aiplt-rgs-plan
+        with:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          DIRECTORY: 'terragent-app/terraform-infra-eastus/'
+
+  terraform-apply:
+    name: 'Terraform Apply'
+    runs-on: ubuntu-latest # Update this if you have a specific runner
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/main'
+    #&& needs.terraform-plan.outputs.tfplanExitCode == 2
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - name: Run Terraform Apply
+        uses: ./.github/workflows/aiplt-rgs-apply
+        with:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          DIRECTORY: 'terragent-app/terraform-infra-eastus/'
+          exitcode: 

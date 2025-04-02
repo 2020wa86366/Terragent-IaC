@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Terragent Azure</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Terragent Azure</h1>
+    <div id="message-box" class="message-box">Status: Unknown</div>
+    <div class="deployment-buttons">
+        <div class="deployment-group">
+          <form action="/deploy/resource-group" method="post">
+              <button type="submit" class="deployment-button">Deploy Resource Group</button>
+          </form>
+          <form action="/destroy/resource-group" method="post">
+              <button type="submit" class="destroy-button">Destroy</button>
+          </form>
+        </div>
+        <div class="deployment-group">
+          <form action="/deploy/vnet" method="post">
+              <button type="submit" class="deployment-button">Deploy Virtual Network</button>
+          </form>
+          <form action="/destroy/vnet" method="post">
+              <button type="submit" class="destroy-button">Destroy</button>
+          </form>
+        </div>
+        <div class="deployment-group">
+          <form action="/deploy/appgw" method="post">
+              <button type="submit" class="deployment-button">Deploy Application Gateway</button>
+          </form>
+          <form action="/destroy/appgw" method="post">
+              <button type="submit" class="destroy-button">Destroy</button>
+          </form>
+        </div>
+        <div class="deployment-group">
+          <form action="/deploy/storage-account" method="post">
+              <button type="submit" class="deployment-button">Deploy Storage Account</button>
+          </form>
+          <form action="/destroy/storage-account" method="post">
+              <button type="submit" class="destroy-button">Destroy</button>
+          </form>
+        </div>
+        <div class="deployment-group">
+          <form action="/deploy/aks" method="post">
+              <button type="submit" class="deployment-button">Deploy Kubernetes</button>
+          </form>
+          <form action="/destroy/aks" method="post">
+              <button type="submit" class="destroy-button">Destroy</button>
+          </form>
+        </div>
+        <!-- Add more buttons for other deployments -->
+    </div>
+  </div>
+  <script src="/script.js"></script>
+</body>
+</html>

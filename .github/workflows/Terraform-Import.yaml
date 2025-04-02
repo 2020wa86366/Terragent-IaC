@@ -1,0 +1,78 @@
+
+name: "off-wf"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dev-RGs/off/**'
+
+env:
+    ARM_CLIENT_ID: "${{ secrets.ARM_CLIENT_ID }}"
+    ARM_CLIENT_SECRET : "${{ secrets.ARM_CLIENT_SECRET }}"
+    ARM_SUBSCRIPTION_ID: "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+    ARM_TENANT_ID: "${{ secrets.ARM_TENANT_ID }}"
+    
+
+jobs:
+  terraform-plan:
+    name: 'Terraform Plan'
+    runs-on: AI360Platform_Prod_LR01
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+           
+          - Dev-RGs/off/
+     
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+
+
+    steps:
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Install the latest version of the Terraform CLI
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_wrapper: false
+
+    # Login Azure
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: |
+         {
+            "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+            "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+            "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+            "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+         }
+
+    - name: Azure CLI script
+      uses: azure/cli@v2
+      with:
+        azcliversion: latest
+        inlineScript: |
+                az account show
+
+    # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+    - name: Terraform Init
+      run: terraform init
+
+    # Checks that all Terraform configuration files adhere to a canonical format
+    # Will fail the build if not
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    #Sync the state file with latest state of infra changes
+    - name: Terraform Refresh
+      run: terraform refresh
+ 
+    - name: Terraform Import
+      run: terraform import azurerm_resource_group.Production-Engineering "/subscriptions/6e1c147d-e3fa-4db8-923d-bb81a6ac3acf/resourceGroups/Production-Engineering(DevOps)"
